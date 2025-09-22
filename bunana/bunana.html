@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>BUNANA 사다리 타기 🎲</title>
+  <style>
+    :root {
+      --bg: #0b0b10; --card:#15151d; --muted:#8f95b2; --text:#e9ebff; --accent:#ffd64d; --win:#3ddc84; --lose:#ff6b6b;
+    }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, "Apple SD Gothic Neo", sans-serif; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 20px; }
+    .card { background: linear-gradient(180deg, #171722, #111119); border:1px solid #23233a; border-radius:18px; padding:18px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .title { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+    h1 { font-size: 22px; margin: 0; letter-spacing: .2px; }
+    .sub { color: var(--muted); font-size: 13px; margin-top:8px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .btn { appearance:none; border:none; outline:none; background:#1f1f2b; color:var(--text); padding:12px 16px; border-radius:12px; cursor:pointer; font-weight:700; font-size:16px; border:1px solid #2b2b42; transition: .15s transform ease, .2s background; }
+    .btn:hover { background:#26263a; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: linear-gradient(180deg, #ffd64d, #f6b81b); color:#1a1400; border-color:#e4a800; }
+    .btn.ghost { background: transparent; border:1px dashed #3a3a55; color:#cfd3ff; }
+    .pill { background:#1a1a27; border:1px solid #2a2a42; padding:6px 10px; border-radius:999px; color:#c6caf0; font-size:12px; }
+
+    /* Ladder */
+    .ladder-wrap { position:relative; height: 380px; background:#0f0f18; border:1px solid #24243a; border-radius:16px; margin:16px 0; overflow:hidden; }
+    #ladderCanvas { width:100%; height:100%; display:block; }
+
+    /* Result */
+    .result { text-align:center; padding:16px; border-radius:16px; background:#10101a; border:1px solid #25253a; display:none; }
+    .result.win { border-color: #1d6a3f; box-shadow: inset 0 0 0 1px rgba(61,220,132,.2); }
+    .result.lose { border-color: #6a1d1d; box-shadow: inset 0 0 0 1px rgba(255,107,107,.15); }
+    .result h2 { margin:0 0 6px; font-size:22px; }
+    .result p { margin:0; color: var(--muted); }
+
+    .lanes { display:flex; justify-content:space-between; margin-top:6px; }
+    .lane-btn { flex:1; text-align:center; padding:10px 6px; margin:0 4px; border-radius:10px; background:#1a1a28; border:1px solid #2a2a44; cursor:pointer; font-weight:700; }
+    .lane-btn:hover { background:#23233a; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .muted { color: var(--muted); }
+    .right { margin-left:auto; }
+
+    /* Admin Modal */
+    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:50; }
+    .modal { width:min(680px, 92vw); background:#101019; border:1px solid #27273f; border-radius:16px; padding:18px; }
+    .modal h3 { margin:0 0 6px; }
+    .field { margin:10px 0; }
+    .field label { font-size:13px; color:#b7bcf0; display:block; margin-bottom:6px; }
+    .field input[type="number"], .field input[type="text"], .field input[type="range"] { width:100%; background:#151525; color:#e5e7ff; border:1px solid #2a2a47; border-radius:10px; padding:10px; }
+    .range-row { display:flex; align-items:center; gap:10px; }
+    .range-row output { width:64px; text-align:right; font-variant-numeric: tabular-nums; }
+
+    .inv { display:flex; gap:10px; }
+    .inv .box { flex:1; background:#121223; border:1px solid #2b2b47; border-radius:12px; padding:10px; text-align:center; }
+    .inv .num { font-size:26px; font-weight:800; }
+
+    .topbar { display:flex; gap:8px; align-items:center; }
+    .topbar .gear { cursor:pointer; padding:6px 8px; border-radius:10px; border:1px solid #2a2a44; background:#141423; }
+
+    /* Toast */
+    .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#151528; border:1px solid #2b2b44; color:#dfe2ff; padding:10px 14px; border-radius:12px; display:none; z-index:60; }
+
+    .tiny { font-size:12px; color:#98a0cf; }
+    .center { text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title topbar">
+        <div>
+          <h1>🍌 BUNANA 사다리 타기</h1>
+          <div class="sub">줄을 하나 고르고 내려가 보세요 😊</div>
+        </div>
+        <div class="gear" id="gear" title="관리자 설정">🔧</div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <span class="pill">오늘 1인 1회 참여</span>
+        <span class="pill" id="probPill">현재 당첨 확률: —</span>
+        <span class="pill right" id="stockPill">재고: —</span>
+      </div>
+
+      <div class="ladder-wrap">
+        <canvas id="ladderCanvas"></canvas>
+      </div>
+
+      <div class="lanes">
+        <button class="lane-btn" data-lane="0">1번 줄</button>
+        <button class="lane-btn" data-lane="1">2번 줄</button>
+        <button class="lane-btn" data-lane="2">3번 줄</button>
+        <button class="lane-btn" data-lane="3">4번 줄</button>
+      </div>
+
+      <div id="result" class="result" role="alert" aria-live="polite"></div>
+
+      <div class="grid" style="margin-top:12px">
+        <button class="btn ghost" id="ruleBtn">룰 보기</button>
+        <button class="btn ghost" id="onceBtn">재참여 해제 코드</button>
+      </div>
+
+      <div class="tiny" style="margin-top:10px">네트워크 불안 시, 스태프가 결과를 수기 처리할 수 있어요. 이 페이지는 오프라인에서도 동작합니다.</div>
+    </div>
+  </div>
+
+  <!-- Admin Modal -->
+  <div class="modal-backdrop" id="adminBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+      <h3 id="adminTitle">관리자 설정</h3>
+      <div class="sub">확률/재고/제한 변경 후 <b>저장</b>을 누르세요.</div>
+
+      <div class="inv" style="margin-top:10px">
+        <div class="box"><div class="tiny">티셔츠 남은 수량</div><div class="num" id="invShirt">-</div></div>
+        <div class="box"><div class="tiny">키링 남은 수량</div><div class="num" id="invKey">-</div></div>
+      </div>
+
+      <div class="field">
+        <label>당첨 확률 (티셔츠)</label>
+        <div class="range-row">
+          <input id="probRange" type="range" min="0" max="100" step="1" />
+          <output id="probOut">0%</output>
+        </div>
+      </div>
+
+      <div class="field grid">
+        <div>
+          <label>티셔츠 재고</label>
+          <input id="stockShirt" type="number" min="0" />
+        </div>
+        <div>
+          <label>키링 재고</label>
+          <input id="stockKey" type="number" min="0" />
+        </div>
+      </div>
+
+      <div class="field grid">
+        <div>
+          <label>1인 1회 제한 (하루 기준)</label>
+          <input id="limitToggle" type="text" value="on" />
+          <div class="tiny">on/off 입력</div>
+        </div>
+        <div>
+          <label>관리자 PIN</label>
+          <input id="pinInput" type="text" />
+          <div class="tiny">기본 1111 — 바꾸고 저장하면 갱신</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="exportBtn">CSV 내보내기</button>
+        <div class="right"></div>
+        <button class="btn ghost" id="cancelAdmin">닫기</button>
+        <button class="btn primary" id="saveAdmin">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ======= Config & State (Local Only) =======
+    const DEFAULTS = { prob: 40, stockShirt: 70, stockKey: 50, limit: 'on', pin: '1111' };
+    const KEY = 'bunana_ladder_config_v1';
+    const LOGKEY = 'bunana_ladder_log_v1';
+
+    const state = loadState();
+    const log = loadLog();
+
+    // ======= Utilities =======
+    function loadState(){
+      const saved = localStorage.getItem(KEY);
+      if (!saved) return { ...DEFAULTS };
+      try { const obj = JSON.parse(saved); return { ...DEFAULTS, ...obj }; } catch { return { ...DEFAULTS }; }
+    }
+    function saveState(){ localStorage.setItem(KEY, JSON.stringify(state)); updateMetaUI(); }
+
+    function loadLog(){ const s = localStorage.getItem(LOGKEY); return s ? JSON.parse(s) : []; }
+    function pushLog(entry){ log.push(entry); localStorage.setItem(LOGKEY, JSON.stringify(log)); }
+
+    function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.style.display='block'; setTimeout(()=>{ t.style.display='none'; }, 2000); }
+
+    function todayKey(){ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); }
+    function deviceId(){ let id=localStorage.getItem('bunana_device_id'); if(!id){ id=Math.random().toString(36).slice(2); localStorage.setItem('bunana_device_id', id);} return id; }
+
+    function playedToday(){ return localStorage.getItem('bunana_play_'+todayKey())==='1'; }
+    function setPlayed(v){ localStorage.setItem('bunana_play_'+todayKey(), v?'1':'0'); }
+
+    function formatStock(){ return `티셔츠 ${state.stockShirt} / 키링 ${state.stockKey}`; }
+
+    // ======= Ladder Drawing =======
+    const canvas = document.getElementById('ladderCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas(){
+      const r = canvas.getBoundingClientRect();
+      // upscale for crispness
+      const scale = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(r.width * scale);
+      canvas.height = Math.floor(r.height * scale);
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      drawLadder();
+    }
+
+    let rungs = [];
+    function genRungs(){
+      rungs = [];
+      const lanes = 4; const height = canvas.clientHeight; const rungCount = 14 + Math.floor(Math.random()*6);
+      for(let i=0;i<rungCount;i++){
+        const y = 20 + Math.random()*(height-40);
+        const lane = Math.floor(Math.random()*(lanes-1));
+        rungs.push({ y, lane });
+      }
+      rungs.sort((a,b)=>a.y-b.y);
+    }
+
+    function drawLadder(){
+      const w = canvas.clientWidth; const h = canvas.clientHeight;
+      ctx.clearRect(0,0,w,h);
+      // bg glow
+      const g = ctx.createLinearGradient(0,0,0,h);
+      g.addColorStop(0,'#0f0f18'); g.addColorStop(1,'#0b0b15');
+      ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+
+      const lanes = 4; const padding = 24; const left = padding; const right = w - padding; const top = 16; const bottom = h - 16;
+      const step = (right-left)/(lanes-1);
+
+      // verticals
+      ctx.strokeStyle = '#2d2d46'; ctx.lineWidth = 3;
+      for(let i=0;i<lanes;i++){
+        const x = left + i*step;
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+      }
+
+      // rungs
+      ctx.strokeStyle = '#3b3b66'; ctx.lineWidth = 3; ctx.lineCap='round';
+      rungs.forEach(r=>{
+        const x1 = left + r.lane*step; const x2 = left + (r.lane+1)*step; const y = r.y;
+        ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+      });
+
+      // labels top/bottom
+      ctx.fillStyle = '#9aa1d6'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+      for(let i=0;i<lanes;i++){
+        const x=left+i*step; ctx.fillText((i+1)+'번', x, 12);
+        ctx.fillText('⬇', x, h-4);
+      }
+    }
+
+    function animateFromLane(lane, cb){
+      const w = canvas.clientWidth; const h = canvas.clientHeight;
+      const padding = 24; const left = padding; const right = w - padding; const top = 16; const bottom = h - 16; const lanes = 4; const step=(right-left)/(lanes-1);
+      let x = left + lane*step; let y = top;
+
+      const laneX = (ln) => left + ln*step;
+
+      // rungs are sorted by y. We'll look ahead for the next rung that touches our current lane
+      function findNextRung(curLane, curY){
+        for(let j=0;j<rungs.length;j++){
+          const r = rungs[j];
+          if(r.y <= curY) continue;
+          if(r.lane === curLane || r.lane+1 === curLane) return { idx:j, rung:r };
+        }
+        return null;
+      }
+
+      let mode = 'down'; // 'down' or 'side'
+      let targetX = null; let nextLane = lane; let nextInfo = findNextRung(lane, y);
+      const downSpeed = 2.4; const sideSpeed = 4.2;
+
+      function frame(){
+        drawLadder();
+        // marker
+        ctx.fillStyle = '#ffd64d';
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI*2); ctx.fill();
+
+        if(mode === 'side'){
+          const dx = targetX - x;
+          if(Math.abs(dx) > 0.8){ x += Math.sign(dx)*sideSpeed; requestAnimationFrame(frame); return; }
+          // finish sideways, switch lane and continue downward
+          x = targetX; lane = nextLane; mode = 'down'; y += 2; // pass the rung slightly
+          nextInfo = findNextRung(lane, y);
+          requestAnimationFrame(frame); return;
+        }
+
+        // mode === 'down'
+        if(nextInfo){
+          const targetY = nextInfo.rung.y;
+          if(y + downSpeed < targetY){ y += downSpeed; requestAnimationFrame(frame); return; }
+          // Arrived at rung height exactly
+          y = targetY;
+          // Decide which direction to move
+          if(nextInfo.rung.lane === lane){ // we're on left vertical, go right
+            targetX = laneX(lane+1); nextLane = lane+1; mode = 'side'; requestAnimationFrame(frame); return;
+          } else if(nextInfo.rung.lane + 1 === lane){ // we're on right vertical, go left
+            targetX = laneX(lane-1); nextLane = lane-1; mode = 'side'; requestAnimationFrame(frame); return;
+          } else {
+            // shouldn't happen, but skip if so
+            nextInfo = findNextRung(lane, y); requestAnimationFrame(frame); return;
+          }
+        } else {
+          // no more rungs touching our lane → go to bottom
+          if(y < bottom){ y = Math.min(bottom, y + downSpeed); requestAnimationFrame(frame); return; }
+          cb && cb(lane); return;
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // ======= Game Flow =======
+    const resultBox = document.getElementById('result');
+    const laneButtons = [...document.querySelectorAll('.lane-btn')];
+
+    function updateMetaUI(){
+      document.getElementById('probPill').textContent = `현재 당첨 확률: ${state.stockShirt>0 ? state.prob : 0}%`;
+      document.getElementById('stockPill').textContent = `재고: ${formatStock()}`;
+    }
+
+    function showResult(win){
+      resultBox.style.display='block';
+      if(win){
+        resultBox.className='result win';
+        resultBox.innerHTML = `<h2>🎉 당첨! 티셔츠 GET!</h2><p class="muted">결과 화면을 스태프에게 보여주세요.</p>`;
+      } else {
+        resultBox.className='result lose';
+        resultBox.innerHTML = `<h2>😅 아쉽지만 꽝!</h2><p class="muted">키링으로 위로해드려요. 결과 화면을 스태프에게 보여주세요.</p>`;
+      }
+    }
+
+    function decideOutcome(){
+      // If shirts are out, force lose
+      if(state.stockShirt <= 0) return false;
+      // If keyrings out, force win (if shirt>0)
+      if(state.stockKey <= 0) return true;
+      const r = Math.random()*100;
+      return r < state.prob;
+    }
+
+    function handlePlay(lane){
+      if(state.limit==='on' && playedToday()){
+        toast('오늘은 이미 참여하셨어요'); return;
+      }
+      // Reset result box
+      resultBox.style.display='none';
+      // new rungs
+      genRungs(); drawLadder();
+      laneButtons.forEach(b=>b.disabled=true);
+      const willWin = decideOutcome();
+      animateFromLane(lane, () => {
+        // apply inventory & log
+        let outcome;
+        if(willWin && state.stockShirt>0){
+          outcome='WIN'; state.stockShirt--; showResult(true);
+        } else {
+          outcome='LOSE'; if(state.stockKey>0) state.stockKey--; showResult(false);
+        }
+        saveState();
+        setPlayed(true);
+        pushLog({ t: Date.now(), device: deviceId(), outcome });
+        laneButtons.forEach(b=>b.disabled=false);
+      });
+    }
+
+    laneButtons.forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        handlePlay(parseInt(btn.dataset.lane,10));
+      });
+    });
+
+    // ======= Admin =======
+    const adminBackdrop = document.getElementById('adminBackdrop');
+    const gear = document.getElementById('gear');
+
+    function openAdmin(){
+      // fill values
+      document.getElementById('probRange').value = state.prob;
+      document.getElementById('probOut').textContent = state.prob+"%";
+      document.getElementById('stockShirt').value = state.stockShirt;
+      document.getElementById('stockKey').value = state.stockKey;
+      document.getElementById('limitToggle').value = state.limit;
+      document.getElementById('pinInput').value = state.pin;
+      document.getElementById('invShirt').textContent = state.stockShirt;
+      document.getElementById('invKey').textContent = state.stockKey;
+      adminBackdrop.style.display='flex';
+    }
+
+    function closeAdmin(){ adminBackdrop.style.display='none'; }
+
+    gear.addEventListener('click', ()=>{
+      const input = prompt('관리자 PIN을 입력하세요');
+      if(input === state.pin) openAdmin(); else toast('PIN이 올바르지 않습니다');
+    });
+
+    document.getElementById('probRange').addEventListener('input', (e)=>{
+      document.getElementById('probOut').textContent = e.target.value + '%';
+    });
+
+    document.getElementById('saveAdmin').addEventListener('click', ()=>{
+      const p = parseInt(document.getElementById('probRange').value,10);
+      const s = Math.max(0, parseInt(document.getElementById('stockShirt').value,10));
+      const k = Math.max(0, parseInt(document.getElementById('stockKey').value,10));
+      const lim = (document.getElementById('limitToggle').value||'on').toLowerCase()==='off'?'off':'on';
+      const pin = (document.getElementById('pinInput').value||'1111').trim();
+      state.prob = Math.max(0, Math.min(100, p));
+      state.stockShirt = isNaN(s)?0:s; state.stockKey = isNaN(k)?0:k;
+      state.limit = lim; state.pin = pin || '1111';
+      saveState(); updateMetaUI(); closeAdmin(); toast('저장 완료');
+    });
+
+    document.getElementById('cancelAdmin').addEventListener('click', closeAdmin);
+
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const rows = [['time_iso','device','outcome']].concat(log.map(x=>[new Date(x.t).toISOString(), x.device, x.outcome]));
+      const csv = rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='bunana_ladder_log.csv'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    // ======= Handy Buttons =======
+    document.getElementById('ruleBtn').addEventListener('click', ()=>{
+      alert('룰\n\n1) 줄 하나를 선택해 사다리를 내려갑니다.\n2) 당첨 시 T‑셔츠, 꽝이면 키링을 드립니다.\n3) 오늘은 1인 1회 참여. 결과 화면을 스태프에게 보여주세요.');
+    });
+
+    document.getElementById('onceBtn').addEventListener('click', ()=>{
+      const code = prompt('스태프 전용: 관리자 PIN 입력 시 오늘 재참여 해제');
+      if(code===state.pin){ setPlayed(false); toast('오늘 재참여 가능 상태로 변경됨'); } else { toast('PIN 불일치'); }
+    });
+
+    // ======= Init =======
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); genRungs(); drawLadder(); updateMetaUI();
+  </script>
+</body>
+</html>
